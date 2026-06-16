@@ -7,9 +7,7 @@
     <style>
         *{margin:0;padding:0;box-sizing:border-box;}
         html,body{width:100%;height:100%;background:#0d0a08;overflow:hidden;}
-        #reader{width:100%;height:100%;padding-top:60px;}
-        .epub-container{background:#ede3c8 !important;}
-        .epub-view{padding:40px !important;font-family:'Georgia',serif !important;line-height:1.8 !important;color:#2a1a10 !important;}
+        #reader{position:fixed;top:60px;left:0;right:0;bottom:0;}
         .header{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(13,10,8,0.85);backdrop-filter:blur(8px);padding:10px 24px;border-bottom:1px solid rgba(200,170,140,0.15);display:flex;justify-content:space-between;align-items:center;}
         .header h1{font-size:1.2rem;color:#f0e6d8;letter-spacing:4px;font-weight:400;font-family:'Georgia',serif;}
         .header .sub{font-size:0.7rem;color:rgba(200,180,160,0.4);letter-spacing:2px;}
@@ -41,61 +39,70 @@
     <div id="reader"></div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script>
+    <!-- Load epub.js from jsDelivr with explicit file path -->
+    <script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.js"></script>
 
     <script>
-        // EPUB lives in the same repo folder — served directly, no proxy needed
         const EPUB_URL = './b24884431.epub';
-
         const loading = document.getElementById('loading');
 
-        // Disable epub.js storage to avoid browser Tracking Prevention errors
-        const book = ePub(EPUB_URL, { store: false });
+        // Stub out localforage so epub.js never touches browser storage
+        window.localforage = {
+            getItem:    () => Promise.resolve(null),
+            setItem:    () => Promise.resolve(null),
+            removeItem: () => Promise.resolve(null),
+            clear:      () => Promise.resolve(null),
+        };
 
-        const rendition = book.renderTo('reader', {
-            width: '100%',
-            height: '100%',
-            flow: 'paginated',
-            spread: 'auto',
-            minSpreadWidth: 600,
-        });
+        function startReader() {
+            const book = ePub(EPUB_URL, { store: false });
 
-        rendition.display().then(() => {
-            loading.style.display = 'none';
-        }).catch((err) => {
-            loading.innerHTML = '❌ 加载失败<br><span style="font-size:0.8rem;opacity:0.7;">' + err.message + '</span>';
-            loading.style.color = '#8a4a3a';
-        });
+            const rendition = book.renderTo('reader', {
+                width: '100%',
+                height: '100%',
+                flow: 'paginated',
+                spread: 'auto',
+                minSpreadWidth: 600,
+            });
 
-        // Navigation
-        document.getElementById('prevBtn').addEventListener('click', () => rendition.prev());
-        document.getElementById('nextBtn').addEventListener('click', () => rendition.next());
+            rendition.display().then(() => {
+                loading.style.display = 'none';
+            }).catch((err) => {
+                loading.innerHTML = '❌ 加载失败<br><span style="font-size:0.8rem;opacity:0.7;">' + err.message + '</span>';
+                loading.style.color = '#8a4a3a';
+            });
 
-        // Keyboard shortcuts
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); rendition.next(); }
-            if (e.key === 'ArrowLeft')                   { e.preventDefault(); rendition.prev(); }
-        });
+            document.getElementById('prevBtn').addEventListener('click', () => rendition.prev());
+            document.getElementById('nextBtn').addEventListener('click', () => rendition.next());
 
-        // Zoom
-        let zoom = 1;
-        document.getElementById('zoomIn').addEventListener('click', () => {
-            zoom = Math.min(1.8, zoom + 0.1);
-            rendition.themes.fontSize(zoom * 100 + '%');
-        });
-        document.getElementById('zoomOut').addEventListener('click', () => {
-            zoom = Math.max(0.6, zoom - 0.1);
-            rendition.themes.fontSize(zoom * 100 + '%');
-        });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); rendition.next(); }
+                if (e.key === 'ArrowLeft') { e.preventDefault(); rendition.prev(); }
+            });
 
-        // Page indicator
-        const pageInfo = document.getElementById('pageInfo');
-        rendition.on('relocated', (location) => {
-            const d = location && location.start && location.start.displayed;
-            if (d && d.page) {
-                pageInfo.textContent = d.page + ' / ' + (d.total || '?');
-            }
-        });
+            let zoom = 1;
+            document.getElementById('zoomIn').addEventListener('click', () => {
+                zoom = Math.min(1.8, zoom + 0.1);
+                rendition.themes.fontSize(zoom * 100 + '%');
+            });
+            document.getElementById('zoomOut').addEventListener('click', () => {
+                zoom = Math.max(0.6, zoom - 0.1);
+                rendition.themes.fontSize(zoom * 100 + '%');
+            });
+
+            const pageInfo = document.getElementById('pageInfo');
+            rendition.on('relocated', (location) => {
+                const d = location && location.start && location.start.displayed;
+                if (d && d.page) pageInfo.textContent = d.page + ' / ' + (d.total || '?');
+            });
+        }
+
+        // Wait until epub.js is fully ready
+        if (typeof ePub !== 'undefined') {
+            startReader();
+        } else {
+            document.querySelector('script[src*="epubjs"]').addEventListener('load', startReader);
+        }
     </script>
 
 </body>
